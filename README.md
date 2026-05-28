@@ -515,3 +515,50 @@ Given that your minikube tunnel is still running in the background, you can veri
 curl -H "Host: web-stage.local" http://127.0.0.1
 curl -H "Host: web-prod.local" http://127.0.0.1
 ```
+
+## Flux Reconciliation
+
+Now let's verify how Flux ensures that git remains the single source of truth. Let's edit the ingress route in the dev namespace:
+
+```bash
+kubectl patch ingressroutes.traefik.io web -n dev --type='json' \
+  -p='[
+    {
+      "op": "replace",
+      "path": "/spec/routes/0/match",
+      "value": "Host(`web-lab.local`)"
+    }
+  ]'
+```
+
+Then let's see how long this takes to reconcile:
+
+```bash
+start=$(date +%s)
+for i in {1..30}; do
+    now=$(date +%s)
+    elapsed=$((now - start))
+    echo "[$elapsed s] Checking..."
+    http_status=$(curl -s -m 2 -o /dev/null -w "%{http_code}" \
+        -H "Host: web-dev.local" \
+        http://127.0.0.1)
+    echo "HTTP $http_status"
+    if [ "$http_status" -eq 200 ]; then
+        echo "Success after ${elapsed}s — exiting loop"
+        break
+    fi
+    sleep 2
+done
+```
+
+To suspend or resume git repositories, kustomizations, or helmreleases, it is possible to use the Flux CLI to persist changes in a imperative or declarative manner:
+
+```bash
+# to persist changes
+flux suspend source <git, helm, ...> <name>
+flux suspend <kustomization, helmrelease, ...> -n <namespace> <name>
+
+# to resume GitOps
+flux resume source <git, helm, ...> <name>
+flux resume <kustomization, helmrelease, ...> -n <namespace> <name>
+```
