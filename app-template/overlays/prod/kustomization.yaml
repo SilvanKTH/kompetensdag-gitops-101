@@ -1,0 +1,37 @@
+---
+# deployment namespace
+namespace: prod
+
+# base kustomization
+resources:
+  - ../../base
+
+# config map generator - different for each environment
+configMapGenerator:
+  - name: web-content
+    files:
+      - index.html
+
+# changes in config map will trigger a rolling update of the deployment
+# generatorOptions:
+#   disableNameSuffixHash: true
+
+# overrides image tag for given image name
+images:
+  - name: nginx
+    newTag: 1.30.2
+
+# overrides number of replicas
+replicas:
+  - name: web
+    count: 3
+
+# patches specific fields in a resource using JSON 6902 patch format - more flexible than YAML patches and can be used to add/remove fields
+patches:
+  - target:
+      kind: IngressRoute
+      name: web
+    patch: |-
+      - op: replace
+        path: /spec/routes/0/match
+        value: Host(`web-prod.local`)

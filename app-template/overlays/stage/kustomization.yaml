@@ -1,0 +1,37 @@
+---
+# deployment namespace
+namespace: stage
+
+# base kustomization
+resources:
+  - ../../base
+
+# config map generator - different for each environment
+configMapGenerator:
+  - name: web-content
+    files:
+      - index.html
+
+# changes in config map will trigger a rolling update of the deployment
+# generatorOptions:
+#   disableNameSuffixHash: true
+
+# patches specific fields in a resource using YAML format - readable but more verbose and less flexible than JSON 6902 format
+patches:
+  - target:
+      kind: IngressRoute
+      name: web
+    patch: |-
+      apiVersion: traefik.io/v1alpha1
+      kind: IngressRoute
+      metadata:
+        name: web
+      spec:
+        entryPoints:
+        - web
+        routes:
+        - kind: Rule
+          match: Host(`web-stage.local`)
+          services:
+          - name: web
+            port: 80

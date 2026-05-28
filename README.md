@@ -324,3 +324,67 @@ flux get sources helm
 flux get helmreleases -n kube-system # this is where the chart gets deployed by default
 kubectl get pods -n kube-system -l app.kubernetes.io/instance=traefik-kube-system # should be running after a short while
 ```
+
+## Kubernetes Kustomizations
+
+Let's link an imaginary application repository to our Flux controllers, and use Kubernetes Kustomizations to tailor the application to each environment. For that, create a new repository in Gitea as we did before, and name the repository *app-demo*.
+
+```bash
+cd ..
+git clone http://localhost:3000/flux-demo/app-demo.git
+cd app-demo
+cp ../kompetensdag-gitops-101/app-template/README.md ./README.md
+git add -A
+git commit -m "chore: first commit"
+git push
+```
+
+Then, let's create the base template for the repository:
+
+```bash
+cp -r ../kompetensdag-gitops-101/app-template/base ./base
+```
+
+and the Kustomizations:
+
+```bash
+cp -r ../kompetensdag-gitops-101/app-template/overlays ./overlays
+```
+
+This should look like this:
+
+```bash
+➜  app-demo git:(main) ✗ tree
+.
+├── README.md
+├── base
+│   ├── deployment.yaml
+│   ├── kustomization.yaml
+│   └── service.yaml
+└── overlays
+    ├── dev
+    │   ├── index.html
+    │   └── kustomization.yaml
+    ├── prod
+    │   ├── index.html
+    │   └── kustomization.yaml
+    └── stage
+        ├── index.html
+        └── kustomization.yaml
+
+6 directories, 10 files
+```
+
+To render the different templates to actual manifests that can be consumed by the kube-api server, you can use kubectl.
+
+```bash
+kubectl kustomize overlays/dev # will render the template without applying anything
+```
+
+If you're happy with the results (it should render), commit the changes made.
+
+```bash
+git add -A
+git commit -m "feat: add base application and overlays for dev, stage and prod"
+git push
+```

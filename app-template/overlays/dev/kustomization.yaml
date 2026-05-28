@@ -1,0 +1,17 @@
+---
+# deployment namespace
+namespace: dev
+
+# base kustomization
+resources:
+  - ../../base
+
+# config map generator - different for each environment
+configMapGenerator:
+  - name: web-content
+    files:
+      - index.html
+
+# ensures that name of generated config map stays the same as in base
+generatorOptions:
+  disableNameSuffixHash: true
