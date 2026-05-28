@@ -388,3 +388,130 @@ git add -A
 git commit -m "feat: add base application and overlays for dev, stage and prod"
 git push
 ```
+
+## Adding External git Repositories to Flux
+
+Now we want to apply the templates using GitOps, that means we need to instruct Flux to
+
+1. Fetch an external repository
+2. Add the flux kustomizations
+
+We can do this as follows using the Flux CLI, or by simply committing the corresponding manifests to the flux-demo repoistory.
+
+```bash
+cd ../flux-demo
+flux create source git app-demo \
+  --url=http://${GITEA_IPADDR}:3000/flux-demo/app-demo.git \
+  --branch=main \
+  --interval=1m \
+  --export > clusters/minikube/sources/app-demo.yaml
+```
+
+Commit this and wait until the source appears and is marked as *Ready*.
+
+```bash
+git add -A
+git commit -m "feat: add app-demo git source"
+git push
+flux get sources git --watch # Ctrl+C to exit once the app-demo source shows up
+```
+
+And then add the kustomizations for the dev overlay:
+
+```bash
+flux create kustomization app-dev \
+  --source=app-demo \
+  --path="./overlays/dev" \
+  --prune=true \
+  --interval=1m \
+  --export >> clusters/minikube/dev/app.yaml
+```
+
+Commit this and verify that the app is being deployed in all its glory:
+
+```bash
+git add -A
+git commit -m "feat: deploy app in dev namespace using GitOps"
+git push
+flux get kustomizations --watch # Ctrl+C to exit once the app-dev source shows up
+```
+
+Then, you'll be able to see the Kubernetes resources being applied.
+
+```bash
+kubectl get all -n dev # should show you the pod, service and deployment
+kubectl describe cm -n dev web-content # should show the dev version
+kubectl describe ingressroute.traefik.io -n dev web # should show the web-dev.local route
+```
+
+To check whether this works, you can do the following:
+
+1. Open a new terminal an run the following command - you can leave this running for the time being:
+
+```bash
+minikube tunnel
+```
+
+2. Run the following curl command to see whether the static HTML file is correctly rendered:
+
+```bash
+curl -H "Host: web-dev.local" http://127.0.0.1
+```
+
+## Adding Overlays for the Other Environments
+
+Now you can add further overlays to also apply the stage and prod deployments. They all have the same common denominator (base) but come with some slight configuration differences.
+
+| Type              | Dev           | Stage           | Prod            |
+|-----------------------------------------------------------------------
+| namespace         | dev           | stage           | prod            |
+| automatic reload  | no            | yes             | yes             |
+| image             | nginx:stable  | nginx:stable    | nginx:1.30.2    |
+| replicas          | 1             | 1               | 3               |
+| ingressroute      | web-dev.local | web-stage.local | web-prod.local  |
+| html file         | dev           | stage           | prod            |
+
+Once the base has been established, customizing the overlays is often pretty straightforward, since a lot of the boilerplate code can be reused.
+
+We have already got the source for the demo-app in place, at this stage we only need to add the kustomizations for the overlays that we want to deploy.
+
+```bash
+flux create kustomization app-stage \
+  --source=app-demo \
+  --path="./overlays/stage" \
+  --prune=true \
+  --interval=1m \
+  --export >> clusters/minikube/stage/app.yaml
+
+flux create kustomization app-prod \
+  --source=app-demo \
+  --path="./overlays/prod" \
+  --prune=true \
+  --interval=1m \
+  --export >> clusters/minikube/prod/app.yaml
+```
+
+Commit this and Flux will pick up the kustomizations.
+
+```bash
+git add clusters/minikube/stage/app.yaml
+git commit -m "feat: deploy app in stage namespace"
+git add clusters/minikube/prod/app.yaml
+git commit -m "feat: deploy app in prod namespace"
+git push
+```
+
+This will be picked up by the Flux controller in a short while.
+
+```bash
+flux get kustomizations --watch
+kubectl get all -n stage
+kubectl get all -n prod
+```
+
+Given that your minikube tunnel is still running in the background, you can verify that the ingressroutes work correctly:
+
+```bash
+curl -H "Host: web-stage.local" http://127.0.0.1
+curl -H "Host: web-prod.local" http://127.0.0.1
+```
