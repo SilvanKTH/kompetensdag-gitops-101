@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  gitea:
+    image: gitea/gitea:1.26 # https://hub.docker.com/r/gitea/gitea/tags
+    container_name: gitea
+    restart: always
+    ports:
+      - "3000:3000"   # Web UI
+      - "2222:22"     # SSH
+    volumes:
+      - gitea-data:/data
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+
+volumes:
+  gitea-data:

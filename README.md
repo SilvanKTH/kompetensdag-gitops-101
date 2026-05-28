@@ -41,3 +41,32 @@ Follow the installation guides here:
 8.  [Adding External git Repositories to Flux](#adding-external-git-repositories-to-flux)
 9.  [Adding Overlays for the Other Environments](#adding-overlays-for-the-other-environments)
 10. [Flux Reconciliation](#flux-reconciliation)
+
+## Running Gitea
+
+You can run a local instance of Gitea using docker compose, see also [docker-compose.yaml](/gitea/docker-compose.yaml).
+
+```bash
+cd kompetensdag-gitops-101/gitea
+docker compose up -d
+```
+
+Once this is running, visit http://localhost:3000 and configure the following:
+
+| Type                    | Value                         | Default |
+| ------------------------|-------------------------------|---------|
+| Database Type           | SQLite3                       | Yes     |
+| Path                    | /data/gitea/gitea.db          | Yes     |
+| Site Title              | Gitea: Git with a cup of tea  | Yes     |
+| Repository Root Path    | /data/git/repositories        | Yes     |
+| Server domain           | host.docker.internal          | No      |
+| SSH Server Port         | 22                            | Yes     |
+| Gitea HTTP Listen Port  | 3000                          | Yes     |
+| Gitea Base URL          | http://localhost:3000/        | Yes     |
+| Log Path                | /data/gitea/log               | Yes     |
+
+Hit *Install Gitea* and create a user - this user is purely for the local instance. Since we're not using a mailserver the email doesn't matter at this point. You can e.g. use:
+
+* Username: flux-demo
+* Email Address: flux-demo@localhost
+* Password: <random> # remember your credentials
