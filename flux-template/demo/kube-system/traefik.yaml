@@ -17,3 +17,6 @@ spec:
   values:
     service:
       type: LoadBalancer
+    providers:
+      kubernetesCRD:
+        enabled: true
