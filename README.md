@@ -463,7 +463,7 @@ curl -H "Host: web-dev.local" http://127.0.0.1
 Now you can add further overlays to also apply the stage and prod deployments. They all have the same common denominator (base) but come with some slight configuration differences.
 
 | Type              | Dev           | Stage           | Prod            |
-|-----------------------------------------------------------------------
+|-------------------|---------------|-----------------|-----------------|
 | namespace         | dev           | stage           | prod            |
 | automatic reload  | no            | yes             | yes             |
 | image             | nginx:stable  | nginx:stable    | nginx:1.30.2    |
