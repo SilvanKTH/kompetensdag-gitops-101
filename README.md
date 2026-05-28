@@ -4,7 +4,7 @@ This repository contains instructions for setting up FluxCD and templates for im
 
 ## What is GitOps?
 
-GitOps is based on the foundation "git as the single source of truth". All code running on a cluster is persisted in git in a declarative way.
+GitOps is based on the premise of git as the single source of truth for the desired state of your cluster. All code running on a cluster is persisted in git in a declarative way. Controllers running inside the cluster reconcile the live state to match the repository.
 
 ## What is a Kustomization?
 
@@ -14,15 +14,18 @@ The idea behind Kustomizations is that you have a so-called base and only need t
 
 ## What is FluxCD?
 
-FluxCD is a set of controllers that allow developers to deploy code to Kubernetes the GitOps way. It consists of controllers that serve different purposes:
+[FluxCD](https://fluxcd.io/) is a GitOps toolkit composed of controllers that allow developers to deploy code to Kubernetes the GitOps way. It consists of controllers that serve different purposes:
 
-- Source Controller - used for fetching manifests from a source, e.g. a git repository
-- Kustomize Controller - used for compiling the manifests from a source
-- Helm Controller - used for deploying helm manifests, similar to Kustomizations
+- Source Controller - used for fetching manifests from a source, e.g. a git repository.
+- Kustomize Controller - used for compiling the manifests from a source.
+- Helm Controller - used for deploying helm manifests, similar to Kustomizations.
+- Notification Controller - used for alerting, not a part of this tutorial.
 
-# Live Demo
+There are alternatives to FluxCD that employ the GitOps principle as well, e.g. [Argo CD](https://argoproj.github.io/cd/).
 
-Local dev only, requires a git repository that is reachable through either ssh or https. This demo uses Docker and minikube.
+# Tutorial
+
+This tutorial walks through setting up a GitOps lab in a local environment. It requires a git repository that is reachable through either ssh or https, we achieve that by running [Gitea](https://about.gitea.com/) on a container. This tutorial uses Docker and minikube, but feel free to use different environments if you like to.
 
 Follow the installation guides here:
 
@@ -41,6 +44,7 @@ Follow the installation guides here:
 8.  [Adding External git Repositories to Flux](#adding-external-git-repositories-to-flux)
 9.  [Adding Overlays for the Other Environments](#adding-overlays-for-the-other-environments)
 10. [Flux Reconciliation](#flux-reconciliation)
+11. [Automatic Reload](#automatic-reload)
 
 ## Running Gitea
 
@@ -112,14 +116,15 @@ which flux
 flux --version # results in flux version 2.8.8 in my case
 ```
 
-The Flux CLI is used to deploy the Flux controllers to the Kubernetes cluster. We use a token for authentication.
+The Flux CLI is used to deploy the Flux controllers to the Kubernetes cluster. We use a token for authentication. Note that FluxCD supports bootstrapping for several providers, such as bitbucket, gitea, gihub or gitlab, but typically requires a HTTPS connection. Hence, we use the `git` bootstrap method.
 
 ```bash
 GITEA_IPADDR=$(ipconfig getifaddr en0) # on Mac, the address on which Kubernetes can reach the git server
+GITEA_HOST=http://${GITEA_IPADDR}:3000
 GITEA_TOKEN=<your token>
 
 flux bootstrap git \
-  --url=http://${GITEA_IPADDR}:3000/flux-demo/flux-demo.git \
+  --url=${GITEA_HOST}/flux-demo/flux-demo.git \
   --branch=main \
   --path=clusters/minikube \
   --username=flux-demo \
@@ -303,6 +308,9 @@ spec:
   values: # equivalent to helm values file
     service:
       type: LoadBalancer
+    providers:
+      kubernetesCRD:
+        enabled: true
 ```
 
 Copy the files and commit to the Flux repository. This will install the chart.
@@ -310,8 +318,8 @@ Copy the files and commit to the Flux repository. This will install the chart.
 ```bash
 mkdir -p clusters/minikube/sources
 cp ../kompetensdag-gitops-101/flux-template/demo/sources/traefik.yaml clusters/minikube/sources/traefik.yaml
-mkdir -p clusters/minikube/infra
-cp ../kompetensdag-gitops-101/flux-template/demo/infra/traefik.yaml clusters/minikube/infra/traefik.yaml
+mkdir -p clusters/minikube/kube-system
+cp ../kompetensdag-gitops-101/flux-template/demo/kube-system/traefik.yaml clusters/minikube/kube-system/traefik.yaml
 git add -A
 git commit -m "feat: install traefik ingress controller"
 git push
@@ -433,7 +441,7 @@ Commit this and verify that the app is being deployed in all its glory:
 git add -A
 git commit -m "feat: deploy app in dev namespace using GitOps"
 git push
-flux get kustomizations --watch # Ctrl+C to exit once the app-dev source shows up
+flux get kustomizations --watch # Ctrl+C to exit once the app-dev kustomization shows up
 ```
 
 Then, you'll be able to see the Kubernetes resources being applied.
@@ -563,6 +571,59 @@ flux resume source <git, helm, ...> <name>
 flux resume <kustomization, helmrelease, ...> -n <namespace> <name>
 ```
 
+## Automatic Reload
+
+Using config map generators it is possible to automatically restart deployments when the values of a config map are updated, unless this is disabled like in the dev environment using the following flag:
+
+```yaml
+generatorOptions:
+  disableNameSuffixHash: true
+```
+
+The config map in the dev environment does not have a unique suffix, whereas the config maps in the stage and prod environment have a suffix that changes with each new revision:
+
+```bash
+➜  flux-demo git:(main) kubectl get cm -A | grep web-content
+dev               web-content                                            1      11m
+prod              web-content-t9bthb88db                                 1      9m5s
+stage             web-content-mgcm9m4984                                 1      9m5s
+```
+
+Let's put this to the test. We can add another line of content in all of the static html files in the app-demo repository:
+
+```html
+<html>
+  <body>
+...
+    <p>Kompetensdag GitOps 101</p>
+  </body>
+</html>
+```
+
+Commit all changed `index.html` and see which pods are restarting:
+
+```bash
+cd ../app-demo
+git add -A
+git commit -m "feat: add content to test automatic reload"
+git push
+kubectl get pods -A --watch | grep web
+```
+
+The deployments in the stage and prod namespaces will be rolled out, whereas the dev environment will just silently change.
+
+```bash
+➜  app-demo git:(main) kubectl get pods,cm -A | grep web
+dev           pod/web-79b64d5555-cblmc                       1/1     Running   0             29m
+prod          pod/web-6c886794c7-85pxk                       1/1     Running   0             2m30s
+prod          pod/web-6c886794c7-gc4tx                       1/1     Running   0             2m31s
+prod          pod/web-6c886794c7-jq7lv                       1/1     Running   0             2m32s
+stage         pod/web-9f5f584f9-h4dqt                        1/1     Running   0             2m32s
+dev               configmap/web-content                                            1      29m
+prod              configmap/web-content-f67b86fccg                                 1      2m32s
+stage             configmap/web-content-m4ddbct4bg                                 1      2m32s
+```
+
 # Tearing Down the Lab
 
 To tear down the lab, stop the minikube tunnel, stop (and optionally delete) the cluster, tear down the docker container, and delete the repositories.
@@ -571,14 +632,16 @@ To tear down the lab, stop the minikube tunnel, stop (and optionally delete) the
 # stop the minikube tunnel with Ctrl+C
 minikube stop
 minikube delete # optional
+cd ../kompetensdag-gitops-101/gitea
 docker compose down -v # use the -v flag to delete the volume
-cd ..
+cd ../..
 rm -rf app-demo/
-rm -rf flux-demo
+rm -rf flux-demo/
 ```
 
 # Links
 
-- FluxCD: https://fluxcd.io/flux/
+- FluxCD: https://fluxcd.io/flux/get-started/
+- Argo CD: https://argo-cd.readthedocs.io/en/stable/
 - Helm: https://helm.sh/docs
 - Traefik: https://doc.traefik.io/traefik/
