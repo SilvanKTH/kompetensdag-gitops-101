@@ -562,3 +562,23 @@ flux suspend <kustomization, helmrelease, ...> -n <namespace> <name>
 flux resume source <git, helm, ...> <name>
 flux resume <kustomization, helmrelease, ...> -n <namespace> <name>
 ```
+
+# Tearing Down the Lab
+
+To tear down the lab, stop the minikube tunnel, stop (and optionally delete) the cluster, tear down the docker container, and delete the repositories.
+
+```bash
+# stop the minikube tunnel with Ctrl+C
+minikube stop
+minikube delete # optional
+docker compose down -v # use the -v flag to delete the volume
+cd ..
+rm -rf app-demo/
+rm -rf flux-demo
+```
+
+# Links
+
+- FluxCD: https://fluxcd.io/flux/
+- Helm: https://helm.sh/docs
+- Traefik: https://doc.traefik.io/traefik/
