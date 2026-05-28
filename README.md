@@ -70,3 +70,126 @@ Hit *Install Gitea* and create a user - this user is purely for the local instan
 * Username: flux-demo
 * Email Address: flux-demo@localhost
 * Password: <random> # remember your credentials
+
+## Create Flux repository in Gitea
+
+Create a new repository in Gitea using **+** sign in the top right corner called **flux-demo**. Leave everything as default.
+Then, create a token that allows read-write access to that repository by browsing to **Settings** >> **Applications** >> **Generate New Token**, give the token a name and select *read-write* for *repository*. Save the token somewhere safe, we will need this token in a bit.
+
+Clone the repository to a any directory outside of this repository:
+
+```bash
+cd ../..
+git clone http://localhost:3000/flux-demo/flux-demo.git
+cd flux-demo
+cp ../kompetensdag-gitops-101/flux-template/README.md ./
+git add README.md
+git commit -m "chore: first commit"
+git push # we are not concerned with branch protection in this lab
+```
+
+## Start minikube - local Kubernetes cluster
+
+Create a minikube cluster as follows:
+
+```bash
+minikube start --driver=docker
+```
+
+Once the minikube startup has succeeded, confirm that all services have started:
+
+```bash
+kubectl get nodes # should be 'minikube' and status should be 'Ready'
+kubectl get pods -A # all pods should be either 'Running' or 'Completed'
+```
+
+## Bootstrap FluxCD
+
+First, we need to install the Flux CLI. Do so by by following the [installation guide](https://fluxcd.io/flux/cmd/) for your OS.
+
+```bash
+which flux
+flux --version # results in flux version 2.8.8 in my case
+```
+
+The Flux CLI is used to deploy the Flux controllers to the Kubernetes cluster. We use a token for authentication.
+
+```bash
+GITEA_IPADDR=$(ipconfig getifaddr en0) # on Mac, the address on which Kubernetes can reach the git server
+GITEA_TOKEN=<your token>
+
+flux bootstrap git \
+  --url=http://${GITEA_IPADDR}:3000/flux-demo/flux-demo.git \
+  --branch=main \
+  --path=clusters/minikube \
+  --username=flux-demo \
+  --password=${GITEA_TOKEN} \
+  --allow-insecure-http
+```
+
+<NOTE>: This will create the gotk-components.yaml file in the specified path on the main branch, but gets stuck at generating the source secret. Verify in a different terminal if the controllers have been created. Then, you can press Ctrl+C and continue with the manual bootstrapping process below.
+
+```bash
+kubectl get all -n flux-system # should display four deployments
+git pull # should retrieve the clusters/minikube/flux-system/gotk-components.yaml file from the upstream flux-demo repoistory
+```
+
+Then, create the git repository source for the flux-demo repository via the Flux CLI. This will allow the Flux source controller to regularly update its index.
+
+```bash
+flux create source git flux-system \
+  --url=http://${GITEA_IPADDR}:3000/flux-demo/flux-demo.git \
+  --branch=main \
+  --interval=1m \
+  --export > clusters/minikube/flux-system/gotk-sync.yaml
+```
+
+Additionally append the following Flux kustomization to the source:
+
+```bash
+flux create kustomization flux-system \
+  --source=flux-system \
+  --path="./clusters/minikube" \
+  --prune=true \
+  --interval=1m \
+  --export >> clusters/minikube/flux-system/gotk-sync.yaml
+```
+
+This results in the following file that we can dissect as follows:
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m0s # how often the source controller will fetch from the upstream repository
+  ref:
+    branch: main # from which branch it will fetch
+  url: http://<gitea-ip-addr>:3000/flux-demo/flux-demo.git # the upstream repository, given the GITEA_IPADDR
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: flux-system
+  namespace: flux-system
+spec:
+  interval: 1m0s # how often Kustomizations will be reconciled
+  path: ./clusters/minikube # the path on which the Kustomizations will be applied
+  prune: true # whether resources will be retained or not, e.g. upon accidental deletion
+  sourceRef:
+    kind: GitRepository # pointer to the repository
+    name: flux-system
+```
+
+Now you can apply the manifest directly, verify that the sources and kustomizations are in place, and commit to the flux-demo repository:
+
+```bash
+kubectl apply -f clusters/minikube/flux-system/gotk-sync.yaml
+flux get all # should display gitrepository/flux-system and kustomization/flux-system
+git add -A
+git commit -m "feat: add flux git repo and kustomization"
+git push
+```
