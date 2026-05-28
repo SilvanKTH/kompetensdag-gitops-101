@@ -262,3 +262,65 @@ These resources are applied directly through the kustomize controller that is fe
 ```bash
 kubectl logs -n flux-system deployments/kustomize-controller
 ```
+
+## Install Treafik Helm Chart
+
+Flux is capable of installing helm charts using its helm controller. To do this, inspect and copy the following files:
+
+1. We need to have a source that is pointing to an upstream repo.
+
+```yaml
+---
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: traefik
+  namespace: flux-system
+spec:
+  url: https://traefik.github.io/charts # upstream repo
+  interval: 10m # governs how often a source is fetched
+```
+
+2. If the source is a helm chart, implement a helm release pointing to the given source.
+
+```yaml
+---
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  interval: 5m # how often a source is queried
+  chart:
+    spec:
+      chart: traefik # name of the chart
+      version: "39.x"   # flexible version constraint
+      sourceRef:
+        kind: HelmRepository
+        name: traefik
+        namespace: flux-system
+  values: # equivalent to helm values file
+    service:
+      type: LoadBalancer
+```
+
+Copy the files and commit to the Flux repository. This will install the chart.
+
+```bash
+mkdir -p clusters/minikube/sources
+cp ../kompetensdag-gitops-101/flux-template/demo/sources/traefik.yaml clusters/minikube/sources/traefik.yaml
+mkdir -p clusters/minikube/infra
+cp ../kompetensdag-gitops-101/flux-template/demo/infra/traefik.yaml clusters/minikube/infra/traefik.yaml
+git add -A
+git commit -m "feat: install traefik ingress controller"
+git push
+```
+
+Wait until the sources and helmreleases are deployed:
+
+```bash
+flux get sources helm
+flux get helmreleases -n kube-system # this is where the chart gets deployed by default
+kubectl get pods -n kube-system -l app.kubernetes.io/instance=traefik-kube-system # should be running after a short while
+```
