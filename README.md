@@ -193,3 +193,72 @@ git add -A
 git commit -m "feat: add flux git repo and kustomization"
 git push
 ```
+
+## Create namespaces
+
+Now let's put FluxCD to the test. Let's create three namespaces declaratively using GitOps. Create the following three directories and copy the manifests from the flux-template directory:
+
+```yaml
+mkdir -p clusters/minikube/dev && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/dev/DEV.md ./clusters/minikube/dev/DEV.md && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/dev/namespace.yaml ./clusters/minikube/dev/namespace.yaml
+mkdir -p clusters/minikube/stage && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/stage/STAGE.md ./clusters/minikube/stage/STAGE.md && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/stage/namespace.yaml ./clusters/minikube/stage/namespace.yaml
+mkdir -p clusters/minikube/prod && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/prod/PROD.md ./clusters/minikube/prod/PROD.md && \
+    cp ../kompetensdag-gitops-101/flux-template/demo/prod/namespace.yaml ./clusters/minikube/prod/namespace.yaml
+```
+
+Your flux repo should resemble something like this:
+
+```bash
+➜  flux-demo git:(main) ✗ tree
+.
+├── README.md
+└── clusters
+    └── minikube
+        ├── dev
+        │   ├── DEV.md
+        │   └── namespace.yaml
+        ├── flux-system
+        │   ├── gotk-components.yaml
+        │   └── gotk-sync.yaml
+        ├── prod
+        │   ├── PROD.md
+        │   └── namespace.yaml
+        └── stage
+            ├── STAGE.md
+            └── namespace.yaml
+
+7 directories, 9 files
+```
+
+Commit everything and wait for Flux to create our namespaces.
+
+```bash
+git add -A
+git commit -m "feat: add dev, stage, and prod Kubernetes namespaces"
+git push
+```
+
+This should result in the following namespaces:
+
+```bash
+➜  flux-demo git:(main) kubectl get ns
+NAME              STATUS   AGE
+default           Active   11m
+dev               Active   9s
+flux-system       Active   9m42s
+kube-node-lease   Active   11m
+kube-public       Active   11m
+kube-system       Active   11m
+prod              Active   9s
+stage             Active   9s
+```
+
+These resources are applied directly through the kustomize controller that is fetching the latest revision of the main branch. You can see this in the logs of the Kustomize controller:
+
+```bash
+kubectl logs -n flux-system deployments/kustomize-controller
+```
